@@ -71,3 +71,86 @@
     strategy-params: (optional (tuple (key (string-ascii 32)) (value uint)))
   }
 )
+
+;; User positions across protocols (portfolio tracker)
+(define-map user-protocol-positions
+  { user: principal, protocol-id: uint }
+  {
+    supplied-assets: (list 5 {token: (string-ascii 32), amount: uint}),
+    borrowed-assets: (list 5 {token: (string-ascii 32), amount: uint}),
+    liquidity-positions: (list 5 {pool-id: (string-ascii 32), amount: uint}),
+    staked-positions: (list 5 {asset: (string-ascii 32), amount: uint}),
+    last-updated-height: uint
+  }
+)
+
+;; Risk parameters for lending protocols
+(define-map protocol-risk-params
+  { protocol-id: uint }
+  {
+    liquidation-threshold: uint, ;; percentage (e.g., 75 = 75%)
+    max-ltv: uint,             ;; percentage
+    liquidation-penalty: uint,  ;; percentage
+    oracle-address: principal
+  }
+)
+
+;; User risk alert settings
+(define-map user-risk-settings
+  { user: principal }
+  {
+    liquidation-alert-threshold: uint, ;; percentage buffer above liquidation (e.g., 5 = 5%)
+    rebalance-threshold: uint,        ;; percentage deviation from target allocation
+    max-slippage: uint,               ;; percentage
+    notification-enabled: bool
+  }
+)
+
+;; Counters for IDs
+(define-data-var next-protocol-id uint u1)
+(define-data-var next-vault-id uint u1)
+
+;; Events
+(define-trait event-trait
+  (
+    (emit-event (string-ascii 64) (string-ascii 256) ) (response bool uint)
+  )
+)
+
+;; Admin functions
+
+;; Initialize contract with the contract owner
+(define-public (initialize (owner principal))
+  (begin
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+    (var-set contract-owner owner)
+    (ok true)
+  )
+)
+
+;; Add a new protocol to the registry
+(define-public (register-protocol 
+                (name (string-ascii 64)) 
+                (protocol-address principal) 
+                (supported-tokens (list 10 (string-ascii 32))) 
+                (protocol-type (string-ascii 32)))
+  (let
+    (
+      (protocol-id (var-get next-protocol-id))
+    )
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+    (map-set protocols
+      { protocol-id: protocol-id }
+      {
+        name: name,
+        protocol-address: protocol-address,
+        is-active: true,
+        trusted: true,
+        supported-tokens: supported-tokens,
+        protocol-type: protocol-type
+      }
+    )
+    (var-set next-protocol-id (+ protocol-id u1))
+    (ok protocol-id)
+  )
+)

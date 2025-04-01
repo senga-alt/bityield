@@ -549,3 +549,80 @@
     (ok u0) ;; Placeholder return value
   )
 )
+
+;; Gasless Transaction Functions
+
+;; Execute a batch transaction across multiple protocols
+(define-public (execute-batch-transaction
+                (actions (list 10 {protocol-id: uint, action: (string-ascii 32), params: (list 5 {key: (string-ascii 32), value: uint})})))
+  (let
+    (
+      (action-count (len actions))
+    )
+    ;; Validate all actions
+    (asserts! (> action-count u0) ERR-INVALID-PARAMETER)
+    
+    ;; Execute all actions in sequence
+    (ok (execute-actions actions))
+  )
+)
+
+;; Execute a list of actions
+(define-private (execute-actions (actions (list 10 {protocol-id: uint, action: (string-ascii 32), params: (list 5 {key: (string-ascii 32), value: uint})})))
+  (fold execute-single-action actions true)
+)
+
+;; Execute a single action within the batch
+(define-private (execute-single-action 
+                (action {protocol-id: uint, action: (string-ascii 32), params: (list 5 {key: (string-ascii 32), value: uint})})
+                (previous-result bool))
+  (let
+    (
+      (protocol-id (get protocol-id action))
+      (action-type (get action action))
+      (params (get params action))
+    )
+    ;; Call appropriate protocol action
+    ;; This is a simplified implementation - would actually call protocol adapter contracts
+    (print {execute: action-type, protocol: protocol-id, params: params})
+    true
+  )
+)
+
+;; Utility Functions
+
+;; Calculate APY for a vault (simplified version)
+(define-read-only (calculate-vault-apy (vault-id uint))
+  (let
+    (
+      (vault (unwrap! (map-get? vaults { vault-id: vault-id }) ERR-VAULT-NOT-FOUND))
+    )
+    ;; This is a simplified implementation - would calculate based on actual returns
+    (ok (get target-apy vault))
+  )
+)
+
+;; Get all active vaults
+(define-read-only (get-active-vaults)
+  (ok u0) ;; Placeholder - would return list of active vault IDs
+)
+
+;; Get vault details
+(define-read-only (get-vault-details (vault-id uint))
+  (ok (unwrap! (map-get? vaults { vault-id: vault-id }) ERR-VAULT-NOT-FOUND))
+)
+
+;; Get protocol details
+(define-read-only (get-protocol-details (protocol-id uint))
+  (ok (unwrap! (map-get? protocols { protocol-id: protocol-id }) ERR-PROTOCOL-NOT-REGISTERED))
+)
+
+;; Get user position in vault
+(define-read-only (get-user-vault-position (user principal) (vault-id uint))
+  (ok (unwrap! (map-get? user-vault-positions { user: user, vault-id: vault-id }) ERR-POSITION-NOT-FOUND))
+)
+
+;; Get user protocol position
+(define-read-only (get-user-protocol-position (user principal) (protocol-id uint))
+  (ok (unwrap! (map-get? user-protocol-positions { user: user, protocol-id: protocol-id }) ERR-POSITION-NOT-FOUND))
+)

@@ -154,3 +154,88 @@
     (ok protocol-id)
   )
 )
+
+;; Update protocol status (activate/deactivate)
+(define-public (update-protocol-status (protocol-id uint) (is-active bool) (trusted bool))
+  (let
+    (
+      (protocol (unwrap! (map-get? protocols { protocol-id: protocol-id }) ERR-PROTOCOL-NOT-REGISTERED))
+    )
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+    (map-set protocols
+      { protocol-id: protocol-id }
+      (merge protocol { is-active: is-active, trusted: trusted })
+    )
+    (ok true)
+  )
+)
+
+;; Set risk parameters for a lending protocol
+(define-public (set-protocol-risk-params
+                (protocol-id uint)
+                (liquidation-threshold uint)
+                (max-ltv uint)
+                (liquidation-penalty uint)
+                (oracle-address principal))
+  (begin
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+    (asserts! (is-some (map-get? protocols { protocol-id: protocol-id })) ERR-PROTOCOL-NOT-REGISTERED)
+    (asserts! (<= liquidation-threshold u100) ERR-INVALID-PARAMETER)
+    (asserts! (<= max-ltv liquidation-threshold) ERR-INVALID-PARAMETER)
+    (asserts! (<= liquidation-penalty u100) ERR-INVALID-PARAMETER)
+    
+    (map-set protocol-risk-params
+      { protocol-id: protocol-id }
+      {
+        liquidation-threshold: liquidation-threshold,
+        max-ltv: max-ltv,
+        liquidation-penalty: liquidation-penalty,
+        oracle-address: oracle-address
+      }
+    )
+    (ok true)
+  )
+)
+
+;; Vault functions
+
+;; Create a new yield optimization vault
+(define-public (create-vault
+                (name (string-ascii 64))
+                (description (string-ascii 256))
+                (strategy (string-ascii 32))
+                (target-apy uint)
+                (risk-level uint)
+                (allocation (list 10 {protocol-id: uint, percentage: uint})))
+  (let
+    (
+      (vault-id (var-get next-vault-id))
+      (total-percentage (fold + (map get-percentage allocation) u0))
+    )
+    ;; Validate input parameters
+    (asserts! (and (>= risk-level u1) (<= risk-level u10)) ERR-INVALID-PARAMETER)
+    (asserts! (is-eq total-percentage u100) ERR-INVALID-PARAMETER)
+    
+    ;; Check all protocols in allocation exist and are active
+    (asserts! (validate-allocation allocation) ERR-INVALID-PROTOCOL)
+    
+    ;; Create the vault
+    (map-set vaults
+      { vault-id: vault-id }
+      {
+        creator: tx-sender,
+        name: name,
+        description: description,
+        strategy: strategy,
+        target-apy: target-apy,
+        risk-level: risk-level,
+        allocation: allocation,
+        is-active: true,
+        total-assets-ustx: u0,
+        creation-height: block-height
+      }
+    )
+    (var-set next-vault-id (+ vault-id u1))
+    (ok vault-id)
+  )
+)

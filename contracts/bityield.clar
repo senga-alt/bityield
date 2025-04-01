@@ -379,3 +379,95 @@
   (print {action: "deposit", protocol-id: protocol-id, amount: amount-ustx})
   true
 )
+
+;; Deallocate funds from protocols (for withdrawal)
+(define-private (deallocate-funds (vault-id uint) (user principal) (amount-ustx uint))
+  (let
+    (
+      (vault (unwrap! (map-get? vaults { vault-id: vault-id }) ERR-VAULT-NOT-FOUND))
+      (allocation (get allocation vault))
+    )
+    ;; Withdraw from protocols according to allocation percentages
+    (ok (withdraw-from-protocols user allocation amount-ustx))
+  )
+)
+
+;; Withdraw funds from protocols according to allocation
+(define-private (withdraw-from-protocols (user principal) (allocation (list 10 {protocol-id: uint, percentage: uint})) (total-amount-ustx uint))
+  (fold withdraw-entry allocation total-amount-ustx)
+)
+
+;; Withdraw a single allocation entry
+(define-private (withdraw-entry (entry {protocol-id: uint, percentage: uint}) (total-amount-ustx uint))
+  (let
+    (
+      (protocol-id (get protocol-id entry))
+      (percentage (get percentage entry))
+      (amount-to-withdraw (/ (* total-amount-ustx percentage) u100))
+    )
+    ;; Call the appropriate protocol adapter function
+    (mock-protocol-withdraw protocol-id amount-to-withdraw)
+    total-amount-ustx
+  )
+)
+
+;; Mock function for protocol withdrawal (would be replaced with actual protocol calls)
+(define-private (mock-protocol-withdraw (protocol-id uint) (amount-ustx uint))
+  (print {action: "withdraw", protocol-id: protocol-id, amount: amount-ustx})
+  true
+)
+
+;; Risk Management Functions
+
+;; Set user risk preferences
+(define-public (set-risk-preferences 
+                (liquidation-alert-threshold uint) 
+                (rebalance-threshold uint) 
+                (max-slippage uint)
+                (notification-enabled bool))
+  (begin
+    (asserts! (<= liquidation-alert-threshold u50) ERR-INVALID-PARAMETER)
+    (asserts! (<= rebalance-threshold u50) ERR-INVALID-PARAMETER)
+    (asserts! (<= max-slippage u50) ERR-INVALID-PARAMETER)
+    
+    (map-set user-risk-settings
+      { user: tx-sender }
+      {
+        liquidation-alert-threshold: liquidation-alert-threshold,
+        rebalance-threshold: rebalance-threshold,
+        max-slippage: max-slippage,
+        notification-enabled: notification-enabled
+      }
+    )
+    (ok true)
+  )
+)
+
+;; Check if a user's position needs liquidation alert
+(define-public (check-liquidation-risk (user principal) (protocol-id uint))
+  (let
+    (
+      (protocol (unwrap! (map-get? protocols { protocol-id: protocol-id }) ERR-PROTOCOL-NOT-REGISTERED))
+      (risk-params (unwrap! (map-get? protocol-risk-params { protocol-id: protocol-id }) ERR-PROTOCOL-NOT-REGISTERED))
+      (user-settings (default-to 
+                      {
+                        liquidation-alert-threshold: u5,
+                        rebalance-threshold: u10,
+                        max-slippage: u5,
+                        notification-enabled: true
+                      }
+                      (map-get? user-risk-settings { user: user })))
+      ;; This would be calculated based on actual position data from the protocol
+      (current-ltv (mock-get-current-ltv user protocol-id))
+      (liquidation-threshold (get liquidation-threshold risk-params))
+      (alert-threshold (- liquidation-threshold (get liquidation-alert-threshold user-settings)))
+    )
+    (if (>= current-ltv alert-threshold)
+      (begin
+        (print {event: "liquidation-alert", user: user, protocol-id: protocol-id, current-ltv: current-ltv, threshold: alert-threshold})
+        (ok true)
+      )
+      (ok false)
+    )
+  )
+)

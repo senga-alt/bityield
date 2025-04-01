@@ -471,3 +471,81 @@
     )
   )
 )
+
+;; Mock function to get current LTV for a user (would be replaced with actual protocol calls)
+(define-private (mock-get-current-ltv (user principal) (protocol-id uint))
+  ;; For demonstration, return a fixed value
+  u70 ;; 70% LTV
+)
+
+;; Rebalance a vault based on market conditions
+(define-public (rebalance-vault (vault-id uint))
+  (let
+    (
+      (vault (unwrap! (map-get? vaults { vault-id: vault-id }) ERR-VAULT-NOT-FOUND))
+    )
+    (asserts! (or 
+                (is-eq tx-sender (get creator vault))
+                (is-eq tx-sender (var-get contract-owner))
+               ) 
+              ERR-NOT-AUTHORIZED)
+    
+    ;; Perform the rebalancing logic
+    ;; This would involve withdrawing from underperforming protocols and depositing into better ones
+    (print {event: "rebalance-vault", vault-id: vault-id})
+    
+    (ok true)
+  )
+)
+
+;; Portfolio Tracking Functions
+
+;; Update a user's position in a protocol
+(define-public (update-protocol-position
+                (protocol-id uint)
+                (supplied-assets (list 5 {token: (string-ascii 32), amount: uint}))
+                (borrowed-assets (list 5 {token: (string-ascii 32), amount: uint}))
+                (liquidity-positions (list 5 {pool-id: (string-ascii 32), amount: uint}))
+                (staked-positions (list 5 {asset: (string-ascii 32), amount: uint})))
+  (let
+    (
+      (protocol (unwrap! (map-get? protocols { protocol-id: protocol-id }) ERR-PROTOCOL-NOT-REGISTERED))
+      (current-position (default-to 
+                        {
+                          supplied-assets: (list ),
+                          borrowed-assets: (list ),
+                          liquidity-positions: (list ),
+                          staked-positions: (list ),
+                          last-updated-height: u0
+                        }
+                        (map-get? user-protocol-positions { user: tx-sender, protocol-id: protocol-id })))
+    )
+    (asserts! (get is-active protocol) ERR-INVALID-PROTOCOL)
+    
+    (map-set user-protocol-positions
+      { user: tx-sender, protocol-id: protocol-id }
+      {
+        supplied-assets: supplied-assets,
+        borrowed-assets: borrowed-assets,
+        liquidity-positions: liquidity-positions,
+        staked-positions: staked-positions,
+        last-updated-height: block-height
+      }
+    )
+    
+    (ok true)
+  )
+)
+
+;; Get a user's total portfolio value (simplified version)
+(define-read-only (get-portfolio-value (user principal))
+  (let
+    (
+      (protocol-count (var-get next-protocol-id))
+      (vault-count (var-get next-vault-id))
+    )
+    ;; Sum up the value across all protocols and vaults
+    ;; This is a simplified implementation - actual would calculate real-time values
+    (ok u0) ;; Placeholder return value
+  )
+)
